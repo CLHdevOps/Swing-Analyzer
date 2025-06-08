@@ -1,10 +1,22 @@
 {
     "hip_shoulder_separation": [30, 60],
+    "hip_shoulder_separation_3d": [0.15, 0.35],
     "pelvis_rotation_deg": [40, 60],
     "shoulder_rotation_deg": [90, 120],
     "bat_speed_mph": [75, 95],
     "stride_timing_ms": [150, 200],
     "knee_angle_deg": [140, 170],
-    "elbow_angle_deg": [90, 140]
+    "elbow_angle_deg": [90, 140],
+    "wrist_snap_timing_ms": [50, 100],
+    "weight_transfer_ratio": [0.6, 0.8],
+    "hip_lead_time_ms": [30, 80],
+    "launch_angle_deg": [10, 30],
+    "spine_tilt_deg": [10, 25],
+    "bat_path_efficiency": [0.75, 0.95],
+    "kinematic_sequence_score": [80, 100],
+    "stance_width_meters": [0.4, 0.7],
+    "center_of_mass_stability": [0.7, 0.9],
+    "rotational_velocity_deg_per_sec": [400, 600],
+    "ground_reaction_force_ratio": [1.2, 1.8]
 }
   

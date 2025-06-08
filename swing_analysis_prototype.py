@@ -1,17 +1,23 @@
 # swing_analysis_prototype.py
-# Prototype: AI-Powered Swing Analysis using OpenPose + Biomechanics Rules
+# Advanced: AI-Powered 3D Swing Analysis using MediaPipe + Enhanced Biomechanics
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import os
 import uuid
-import subprocess
 import json
 import tempfile
 import shutil
+import traceback
+from pose_3d_estimator import Pose3DEstimator
+from biomechanics_3d_analyzer import Biomechanics3DAnalyzer
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+
+# Initialize 3D pose estimation and biomechanics analysis
+pose_estimator = Pose3DEstimator()
+biomechanics_analyzer = Biomechanics3DAnalyzer()
 
 # Load biomechanical swing standards from a JSON file
 try:
@@ -23,157 +29,77 @@ except FileNotFoundError:
     print("Warning: biomechanics_ideal.json not found. Using default values.")
     IDEAL_METRICS = {
         "hip_shoulder_separation": [30, 60],
+        "hip_shoulder_separation_3d": [0.15, 0.35],
         "pelvis_rotation_deg": [40, 60],
         "bat_speed_mph": [75, 95]
     }
 
-def run_openpose(video_path, output_dir):
-    """Run OpenPose on the uploaded video and save keypoints to JSON."""
-    # Check for different OpenPose installations
-    openpose_paths = [
-        "./build/examples/openpose/openpose.bin",  # Linux build
-        "./bin/OpenPoseDemo.exe",  # Windows build
-        "openpose",  # System PATH
-        "/usr/local/bin/openpose"  # Common Linux install
-    ]
-    
-    openpose_cmd = None
-    for path in openpose_paths:
-        if os.path.exists(path) or shutil.which(path):
-            openpose_cmd = path
-            break
-    
-    if not openpose_cmd:
-        print("Warning: OpenPose not found. Using mock analysis.")
-        return create_mock_keypoints(output_dir)
-    
+def run_3d_pose_analysis(video_path, output_dir):
+    """Run 3D pose analysis on the uploaded video using MediaPipe."""
     try:
-        subprocess.run([
-            openpose_cmd,
-            "--video", video_path,
-            "--write_json", output_dir,
-            "--display", "0",
-            "--render_pose", "0"
-        ], check=True, timeout=120)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-        print("Warning: OpenPose execution failed. Using mock analysis.")
-        return create_mock_keypoints(output_dir)
-    
-    return output_dir
+        # Process video with 3D pose estimation
+        pose_file = pose_estimator.process_video(video_path, output_dir)
+        
+        # Load pose data for analysis
+        with open(pose_file, 'r') as f:
+            pose_data = json.load(f)
+        
+        # Perform biomechanical analysis
+        analysis_results = biomechanics_analyzer.analyze_swing_3d(pose_data)
+        
+        # Create visualizations
+        matplotlib_path, plotly_path = pose_estimator.create_3d_visualization(pose_data, output_dir)
+        analysis_results['visualizations'] = {
+            'matplotlib_plot': matplotlib_path,
+            'interactive_plot': plotly_path
+        }
+        
+        return analysis_results
+        
+    except Exception as e:
+        print(f"3D pose analysis failed: {e}")
+        print("Using mock 3D analysis for testing...")
+        return create_mock_3d_analysis(output_dir)
 
-def create_mock_keypoints(output_dir):
-    """Create mock keypoint data for testing when OpenPose is not available."""
-    mock_data = {
-        "version": 1.7,
-        "people": [{
-            "person_id": [-1],
-            "pose_keypoints_2d": [
-                # Mock keypoints with some intentional "flaws" for testing
-                100, 200, 0.9,  # 0: Nose
-                110, 190, 0.9,  # 1: Neck
-                80, 220, 0.9,   # 2: R Shoulder (closer than ideal)
-                140, 220, 0.9,  # 3: L Shoulder
-                70, 280, 0.9,   # 4: R Elbow
-                150, 280, 0.9,  # 5: L Elbow
-                60, 340, 0.9,   # 6: R Wrist
-                160, 340, 0.9,  # 7: L Wrist
-                90, 350, 0.9,   # 8: Mid Hip
-                85, 350, 0.9,   # 9: R Hip (close to shoulders - insufficient separation)
-                95, 350, 0.9,   # 10: L Hip
-                80, 450, 0.9,   # 11: R Knee
-                100, 450, 0.9,  # 12: L Knee
-                75, 550, 0.9,   # 13: R Ankle
-                105, 550, 0.9,  # 14: L Ankle
-                108, 195, 0.9,  # 15: R Eye
-                112, 195, 0.9,  # 16: L Eye
-                106, 205, 0.9,  # 17: R Ear
-                114, 205, 0.9   # 18: L Ear
-            ] + [0.0] * (25 - 19) * 3  # Fill remaining keypoints
-        }]
-    }
-    
-    # Create mock JSON file
-    mock_file = os.path.join(output_dir, "000000000000_keypoints.json")
-    with open(mock_file, 'w') as f:
-        json.dump(mock_data, f)
-    
-    return output_dir
-
-def analyze_pose(keypoint_json_dir):
-    """Analyze extracted pose keypoints vs biomechanics standards."""
-    issues_detected = []
-    
-    json_files = [f for f in os.listdir(keypoint_json_dir) if f.endswith(".json")]
-    if not json_files:
-        return ["No pose data found in video"]
-    
-    for file in json_files:
-        try:
-            with open(os.path.join(keypoint_json_dir, file)) as f:
-                data = json.load(f)
-                
-            if not data.get("people"):
-                continue
-                
-            keypoints = data["people"][0]["pose_keypoints_2d"]
-            if len(keypoints) < 57:  # 19 keypoints * 3 values each
-                continue
-            
-            # Extract key body points (x, y, confidence)
-            r_shoulder = (keypoints[6], keypoints[7])   # keypoint 2
-            l_shoulder = (keypoints[9], keypoints[10])  # keypoint 3
-            r_hip = (keypoints[27], keypoints[28])      # keypoint 9
-            l_hip = (keypoints[30], keypoints[31])      # keypoint 10
-            r_elbow = (keypoints[12], keypoints[13])    # keypoint 4
-            l_elbow = (keypoints[15], keypoints[16])    # keypoint 5
-            
-            # Check hip-shoulder separation
-            avg_shoulder_x = (r_shoulder[0] + l_shoulder[0]) / 2
-            avg_hip_x = (r_hip[0] + l_hip[0]) / 2
-            separation = abs(avg_shoulder_x - avg_hip_x)
-            
-            if separation < IDEAL_METRICS["hip_shoulder_separation"][0]:
-                issues_detected.append("Insufficient hip-shoulder separation")
-            
-            # Check shoulder width for stance
-            shoulder_width = abs(r_shoulder[0] - l_shoulder[0])
-            if shoulder_width < 50:  # pixels - adjust based on typical video resolution
-                issues_detected.append("Narrow stance detected")
-            
-            # Check elbow positioning
-            r_elbow_angle = calculate_angle(r_shoulder, r_elbow, (r_elbow[0], r_elbow[1] + 50))
-            if r_elbow_angle < 90:
-                issues_detected.append("Back elbow too low")
-                
-        except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
-            print(f"Error processing {file}: {e}")
-            continue
-    
-    return issues_detected
-
-def calculate_angle(point1, point2, point3):
-    """Calculate angle between three points."""
-    import math
-    
-    # Vector from point2 to point1
-    v1 = (point1[0] - point2[0], point1[1] - point2[1])
-    # Vector from point2 to point3
-    v2 = (point3[0] - point2[0], point3[1] - point2[1])
-    
-    # Calculate dot product and magnitudes
-    dot_product = v1[0] * v2[0] + v1[1] * v2[1]
-    magnitude1 = math.sqrt(v1[0]**2 + v1[1]**2)
-    magnitude2 = math.sqrt(v2[0]**2 + v2[1]**2)
-    
-    if magnitude1 == 0 or magnitude2 == 0:
-        return 0
-    
-    # Calculate angle in degrees
-    cos_angle = dot_product / (magnitude1 * magnitude2)
-    cos_angle = max(-1, min(1, cos_angle))  # Clamp to [-1, 1]
-    angle = math.acos(cos_angle) * 180 / math.pi
-    
-    return angle
+def create_mock_3d_analysis(output_dir):
+    """Create mock 3D analysis for testing when pose estimation fails."""
+    try:
+        # Create mock 3D pose data
+        pose_file = pose_estimator.create_mock_3d_data(output_dir)
+        
+        # Load mock data
+        with open(pose_file, 'r') as f:
+            pose_data = json.load(f)
+        
+        # Analyze mock data
+        analysis_results = biomechanics_analyzer.analyze_swing_3d(pose_data)
+        
+        # Create mock visualizations
+        matplotlib_path, plotly_path = pose_estimator.create_3d_visualization(pose_data, output_dir)
+        analysis_results['visualizations'] = {
+            'matplotlib_plot': matplotlib_path,
+            'interactive_plot': plotly_path
+        }
+        
+        # Add some intentional issues for demonstration
+        analysis_results['issues_detected'].extend([
+            "Mock analysis - Insufficient 3D hip-shoulder separation",
+            "Mock analysis - Poor kinematic sequence timing"
+        ])
+        
+        return analysis_results
+        
+    except Exception as e:
+        print(f"Mock analysis creation failed: {e}")
+        return {
+            'issues_detected': ["Analysis system unavailable"],
+            'recommendations': [],
+            'performance_scores': {'overall_score': 0},
+            'swing_phases': {},
+            'kinematic_sequence': {},
+            'spatial_analysis': {},
+            'temporal_analysis': {}
+        }
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
@@ -213,100 +139,122 @@ def analyze():
             # Save uploaded video
             video.save(video_path)
             
-            # Run pose analysis
-            run_openpose(video_path, output_dir)
-            issues = analyze_pose(output_dir)
+            # Run 3D pose analysis
+            analysis_results = run_3d_pose_analysis(video_path, output_dir)
             
-            # Enhanced recommendations mapping
-            recommendations = {
-                "Insufficient hip-shoulder separation": {
-                    "drills": [
-                        "Separation drill with resistance band",
-                        "Stride pause drill",
-                        "Hip-shoulder dissociation drill",
-                        "Coil and fire drill"
-                    ],
-                    "exercises": [
-                        "Medicine ball rotational throws",
-                        "Cable torso twists",
-                        "Russian twists with medicine ball",
-                        "Seated spinal rotation"
-                    ]
-                },
-                "Narrow stance detected": {
-                    "drills": [
-                        "Wide stance batting practice",
-                        "Balance board drills",
-                        "Stance width marker drill"
-                    ],
-                    "exercises": [
-                        "Single-leg balance exercises",
-                        "Lateral lunges",
-                        "Hip abductor strengthening"
-                    ]
-                },
-                "Back elbow too low": {
-                    "drills": [
-                        "Elbow height drill with mirror",
-                        "Wall lean drill",
-                        "High elbow batting tee work"
-                    ],
-                    "exercises": [
-                        "Rear deltoid strengthening",
-                        "External rotation exercises",
-                        "Rhomboid strengthening"
-                    ]
-                },
-                "No pose data found in video": {
-                    "drills": [
-                        "Try recording from a different angle",
-                        "Ensure good lighting in video",
-                        "Record against a plain background"
-                    ],
-                    "exercises": []
-                }
-            }
-            
-            # Build feedback response
+            # Build enhanced feedback response
             feedback = []
-            for issue in issues:
+            for recommendation in analysis_results.get('recommendations', []):
                 feedback.append({
-                    "issue": issue,
-                    "drills": recommendations.get(issue, {}).get("drills", ["General swing improvement drills"]),
-                    "exercises": recommendations.get(issue, {}).get("exercises", ["General strength training"])
+                    "issue": recommendation.get('technical_focus', 'General improvement needed'),
+                    "category": recommendation.get('category', 'General'),
+                    "drills": recommendation.get('drills', []),
+                    "exercises": recommendation.get('exercises', []),
+                    "technical_focus": recommendation.get('technical_focus', '')
                 })
+            
+            # Add simple issue-based feedback for compatibility
+            for issue in analysis_results.get('issues_detected', []):
+                if not any(rec.get('technical_focus', '').lower() in issue.lower() for rec in analysis_results.get('recommendations', [])):
+                    feedback.append({
+                        "issue": issue,
+                        "category": "Biomechanics",
+                        "drills": ["Video analysis review", "Professional coaching consultation"],
+                        "exercises": ["General conditioning"],
+                        "technical_focus": f"Address: {issue}"
+                    })
+            
+            # Prepare visualization URLs (if available)
+            visualizations = analysis_results.get('visualizations', {})
+            viz_urls = {}
+            if visualizations.get('matplotlib_plot') and os.path.exists(visualizations['matplotlib_plot']):
+                viz_urls['swing_analysis_plot'] = f"/visualization/{os.path.basename(visualizations['matplotlib_plot'])}"
+            if visualizations.get('interactive_plot') and os.path.exists(visualizations['interactive_plot']):
+                viz_urls['interactive_3d'] = f"/visualization/{os.path.basename(visualizations['interactive_plot'])}"
             
             return jsonify({
                 "feedback": feedback,
                 "status": "success",
-                "analysis_notes": f"Analyzed {len(os.listdir(output_dir))} frames" if os.path.exists(output_dir) else "Mock analysis used"
+                "analysis_type": "3D Pose Analysis with MediaPipe",
+                "performance_scores": analysis_results.get('performance_scores', {}),
+                "swing_phases": analysis_results.get('swing_phases', {}),
+                "kinematic_sequence": analysis_results.get('kinematic_sequence', {}),
+                "spatial_analysis": {
+                    "hip_shoulder_separation": analysis_results.get('spatial_analysis', {}).get('hip_shoulder_separation', []),
+                    "spine_tilt": analysis_results.get('spatial_analysis', {}).get('spine_tilt', []),
+                    "stance_width": analysis_results.get('spatial_analysis', {}).get('stance_width', [])
+                },
+                "temporal_analysis": analysis_results.get('temporal_analysis', {}),
+                "visualizations": viz_urls,
+                "analysis_notes": f"3D analysis completed with {len(analysis_results.get('swing_phases', {}))} swing phases identified"
             })
             
         finally:
-            # Clean up temporary files
-            try:
-                shutil.rmtree(temp_dir)
-            except:
-                pass  # Don't fail if cleanup fails
+            # Store temp_dir path for visualization serving (don't clean up immediately)
+            # We'll clean up after visualization requests
+            app.config['TEMP_DIRS'] = getattr(app.config, 'TEMP_DIRS', [])
+            app.config['TEMP_DIRS'].append(temp_dir)
+            
+            # Clean up old temp directories (keep only last 5)
+            if len(app.config['TEMP_DIRS']) > 5:
+                old_dir = app.config['TEMP_DIRS'].pop(0)
+                try:
+                    shutil.rmtree(old_dir)
+                except:
+                    pass
                 
     except Exception as e:
         print(f"Analysis error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
         return jsonify({
-            "error": f"Analysis failed: {str(e)}",
-            "status": "error"
+            "error": f"3D Analysis failed: {str(e)}",
+            "status": "error",
+            "analysis_type": "Error"
         }), 500
+
+@app.route('/visualization/<filename>')
+def serve_visualization(filename):
+    """Serve visualization files."""
+    try:
+        # Look for the file in temp directories
+        for temp_dir in app.config.get('TEMP_DIRS', []):
+            file_path = os.path.join(temp_dir, 'output', filename)
+            if os.path.exists(file_path):
+                return send_file(file_path)
+        
+        return jsonify({"error": "Visualization not found"}), 404
+    except Exception as e:
+        return jsonify({"error": f"Failed to serve visualization: {str(e)}"}), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint."""
+    try:
+        # Test MediaPipe availability
+        import mediapipe as mp
+        mediapipe_available = True
+    except ImportError:
+        mediapipe_available = False
+    
+    try:
+        # Test other dependencies
+        import cv2, numpy, matplotlib, plotly, scipy
+        dependencies_available = True
+    except ImportError:
+        dependencies_available = False
+    
     return jsonify({
         "status": "healthy",
-        "openpose_available": any(os.path.exists(path) or shutil.which(path) for path in [
-            "./build/examples/openpose/openpose.bin",
-            "./bin/OpenPoseDemo.exe",
-            "openpose",
-            "/usr/local/bin/openpose"
-        ])
+        "analysis_type": "3D Pose Analysis with MediaPipe",
+        "mediapipe_available": mediapipe_available,
+        "dependencies_available": dependencies_available,
+        "features": [
+            "3D pose estimation",
+            "Kinematic sequence analysis",
+            "Spatial biomechanics",
+            "Temporal analysis",
+            "Interactive visualizations"
+        ]
     })
 
 if __name__ == '__main__':
