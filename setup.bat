@@ -150,12 +150,24 @@ cd ..
 echo.
 
 echo ========================================
-echo Setup completed successfully!
+echo 3D Swing Analyzer Setup Complete!
 echo ========================================
 echo.
+echo ✓ MediaPipe 3D pose estimation ready
+echo ✓ Advanced biomechanical analysis enabled
+echo ✓ Interactive 3D visualizations configured
+echo ✓ Kinematic sequence analysis available
+echo.
 echo To start the application:
-echo 1. Backend: run "start_backend.bat"
-echo 2. Frontend: run "start_frontend.bat"
+echo 1. Backend (3D Analysis): run "start_backend.bat"
+echo 2. Frontend (Enhanced UI): run "start_frontend.bat"
 echo 3. Or run both: "start_all.bat"
+echo.
+echo Features available:
+echo - 3D pose estimation with MediaPipe
+echo - Kinematic sequence analysis
+echo - Spatial biomechanics evaluation
+echo - Interactive 3D visualizations
+echo - Professional swing recommendations
 echo.
 pause
