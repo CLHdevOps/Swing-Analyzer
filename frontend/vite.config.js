@@ -9,5 +9,13 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    // Preserve symlinks to fix path resolution issues
+    preserveSymlinks: true,
+  },
+  server: {
+    // Handle symlinks properly
+    fs: {
+      allow: ['..'],
+    },
   },
 })
