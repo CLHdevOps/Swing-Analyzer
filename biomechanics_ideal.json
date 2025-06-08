@@ -1,0 +1,10 @@
+{
+    "hip_shoulder_separation": [30, 60],
+    "pelvis_rotation_deg": [40, 60],
+    "shoulder_rotation_deg": [90, 120],
+    "bat_speed_mph": [75, 95],
+    "stride_timing_ms": [150, 200],
+    "knee_angle_deg": [140, 170],
+    "elbow_angle_deg": [90, 140]
+}
+  
