@@ -12,6 +12,24 @@ import time
 import platform
 from pathlib import Path
 
+def get_python_command():
+    """Determine which Python command to use"""
+    try:
+        result = subprocess.run(["python", "--version"], capture_output=True, text=True)
+        if result.returncode == 0:
+            return "python"
+    except FileNotFoundError:
+        pass
+    
+    try:
+        result = subprocess.run(["py", "--version"], capture_output=True, text=True)
+        if result.returncode == 0:
+            return "py"
+    except FileNotFoundError:
+        pass
+    
+    return sys.executable  # Fallback to current Python executable
+
 def get_venv_python():
     """Get the path to the virtual environment Python executable"""
     system = platform.system().lower()
@@ -127,6 +145,9 @@ def main():
     print()
     
     # Check prerequisites
+    python_cmd = get_python_command()
+    print(f"Using Python command: {python_cmd}")
+    
     venv_path = Path("venv")
     if not venv_path.exists():
         print("ERROR: Virtual environment not found")

@@ -4,20 +4,87 @@ echo Swing Analyzer Setup Script
 echo ========================================
 echo.
 
-REM Check if Python is installed
+REM Check if Python is installed - try python command first
+set PYTHON_CMD=python
+echo Checking for Python installation...
+echo.
+
+REM Test python command
+echo Testing 'python' command...
 python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ERROR: Python is not installed or not in PATH
-    echo Please install Python 3.8+ from https://python.org
-    pause
-    exit /b 1
+if %errorlevel% equ 0 (
+    echo ✓ 'python' command works
+    set PYTHON_CMD=python
+    python --version
+    goto :python_found
+) else (
+    echo ✗ 'python' command not found
 )
+
+REM Test py command
+echo Testing 'py' command...
+py --version >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ✓ 'py' command works
+    set PYTHON_CMD=py
+    py --version
+    goto :python_found
+) else (
+    echo ✗ 'py' command not found
+)
+
+REM Try to find Python in common locations
+echo Searching for Python in common locations...
+if exist "C:\Users\%USERNAME%\AppData\Local\Programs\Python" (
+    echo Found Python installation at: C:\Users\%USERNAME%\AppData\Local\Programs\Python
+    echo Please add this to your PATH or reinstall Python with "Add to PATH" option
+) else if exist "C:\Python*" (
+    echo Found Python installation in C:\ drive
+    echo Please add this to your PATH or reinstall Python with "Add to PATH" option
+) else (
+    echo No Python installation found in common locations
+)
+
+echo.
+echo ERROR: Python is not accessible from command line
+echo.
+echo SOLUTIONS:
+echo.
+echo 1. If Python is installed but not in PATH:
+echo    - Reinstall Python from python.org
+echo    - Check "Add Python to PATH" during installation
+echo.
+echo 2. Install Python using Microsoft Store:
+echo    - Press Windows key + R, type: ms-windows-store:
+echo    - Search for "Python 3.12" and install
+echo.
+echo 3. Manual PATH fix:
+echo    - Find your Python installation folder
+echo    - Add it to Windows PATH environment variable
+echo.
+echo 4. See detailed guide: INSTALL_PYTHON.md
+echo.
+echo Please fix Python installation and run this script again.
+echo.
+pause
+exit /b 1
+
+:python_found
+echo ✓ Python is available via '%PYTHON_CMD%' command
 
 REM Check if Node.js is installed
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo ERROR: Node.js is not installed or not in PATH
-    echo Please install Node.js from https://nodejs.org
+    echo.
+    echo SOLUTION: Please install Node.js:
+    echo.
+    echo 1. Visit: https://nodejs.org
+    echo 2. Download the LTS version ^(recommended^)
+    echo 3. Run the installer with default settings
+    echo 4. Restart this Command Prompt
+    echo 5. Run this setup script again
+    echo.
     pause
     exit /b 1
 )
@@ -28,7 +95,7 @@ echo.
 REM Create virtual environment if it doesn't exist
 if not exist "venv" (
     echo Creating Python virtual environment...
-    python -m venv venv
+    %PYTHON_CMD% -m venv venv
     if %errorlevel% neq 0 (
         echo ERROR: Failed to create virtual environment
         pause

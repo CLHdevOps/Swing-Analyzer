@@ -26,17 +26,35 @@ def run_command(command, cwd=None, shell=True):
         return False
 
 def check_python():
-    """Check if Python is available"""
+    """Check if Python is available and determine command to use"""
     try:
         version = sys.version_info
         if version.major < 3 or (version.major == 3 and version.minor < 8):
             print("ERROR: Python 3.8+ is required")
-            return False
+            return False, None
         print(f"Python {version.major}.{version.minor}.{version.micro} detected")
-        return True
+        
+        # Test which command works
+        try:
+            result = subprocess.run(["python", "--version"], capture_output=True, text=True)
+            if result.returncode == 0:
+                return True, "python"
+        except FileNotFoundError:
+            pass
+        
+        try:
+            result = subprocess.run(["py", "--version"], capture_output=True, text=True)
+            if result.returncode == 0:
+                return True, "py"
+        except FileNotFoundError:
+            pass
+        
+        # If we're here, we're running Python but neither command works (shouldn't happen)
+        return True, sys.executable
+        
     except Exception:
         print("ERROR: Python not found")
-        return False
+        return False, None
 
 def check_node():
     """Check if Node.js is available"""
@@ -52,7 +70,7 @@ def check_node():
         print("ERROR: Node.js not found")
         return False
 
-def create_venv():
+def create_venv(python_cmd):
     """Create Python virtual environment"""
     venv_path = Path("venv")
     if venv_path.exists():
@@ -60,7 +78,7 @@ def create_venv():
         return True
     
     print("Creating Python virtual environment...")
-    return run_command(f"{sys.executable} -m venv venv")
+    return run_command(f"{python_cmd} -m venv venv")
 
 def get_venv_python():
     """Get the path to the virtual environment Python executable"""
@@ -113,9 +131,12 @@ def main():
     print()
     
     # Check prerequisites
-    if not check_python():
+    python_available, python_cmd = check_python()
+    if not python_available:
         print("Please install Python 3.8+ from https://python.org")
         return 1
+    
+    print(f"Using Python command: {python_cmd}")
     
     if not check_node():
         print("Please install Node.js from https://nodejs.org")
@@ -125,7 +146,7 @@ def main():
     print()
     
     # Create virtual environment
-    if not create_venv():
+    if not create_venv(python_cmd):
         print("Failed to create virtual environment")
         return 1
     
@@ -145,9 +166,9 @@ def main():
     print("=" * 50)
     print()
     print("To start the application:")
-    print("1. Backend: python start_backend.py")
-    print("2. Frontend: python start_frontend.py")
-    print("3. Or run both: python start_all.py")
+    print(f"1. Backend: {python_cmd} start_backend.py")
+    print(f"2. Frontend: {python_cmd} start_frontend.py")
+    print(f"3. Or run both: {python_cmd} start_all.py")
     print()
     
     return 0

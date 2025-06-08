@@ -6,8 +6,10 @@ This guide explains how to set up and run the Swing Analyzer application, which 
 
 Before running the setup scripts, ensure you have the following installed:
 
-- **Python 3.8+**: Download from [python.org](https://python.org)
+- **Python 3.8+**: Download from [python.org](https://python.org) or Microsoft Store
 - **Node.js 16+**: Download from [nodejs.org](https://nodejs.org)
+
+**⚠️ If Python is not installed**: See detailed installation guide in [`INSTALL_PYTHON.md`](INSTALL_PYTHON.md:1)
 
 ## Quick Start
 

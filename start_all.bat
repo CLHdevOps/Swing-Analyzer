@@ -26,8 +26,22 @@ if not exist "frontend\node_modules" (
     exit /b 1
 )
 
+REM Determine Python command to use
+set PYTHON_CMD=python
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    py --version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo ERROR: Python not found. Please install Python first.
+        pause
+        exit /b 1
+    ) else (
+        set PYTHON_CMD=py
+    )
+)
+
 echo Starting backend server in background...
-start "Backend Server" cmd /k "call venv\Scripts\activate.bat && python swing_analysis_prototype.py"
+start "Backend Server" cmd /k "call venv\Scripts\activate.bat && %PYTHON_CMD% swing_analysis_prototype.py"
 
 echo Waiting 3 seconds for backend to initialize...
 timeout /t 3 /nobreak >nul
