@@ -1,6 +1,7 @@
 @echo off
 echo ========================================
-echo Swing Analyzer Setup Script
+echo 3D Swing Analyzer Setup Script
+echo Advanced Biomechanical Analysis System
 echo ========================================
 echo.
 
