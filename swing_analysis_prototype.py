@@ -162,19 +162,26 @@ def _are_analysis_modules_available() -> bool:
     """Check if required analysis modules are available."""
     return pose_estimator is not None and biomechanics_analyzer is not None
 
-
 def _process_video_for_pose_data(video_path: str, output_dir: str) -> str:
-    """Process video file to extract pose data."""
+    """Process video file to extract pose data and verify expected structure."""
     try:
         pose_file = pose_estimator.process_video(video_path, output_dir)
-        
+
         if not pose_file or not os.path.exists(pose_file):
             raise FileNotFoundError(f"Pose estimation failed to generate output file: {pose_file}")
-            
+
+        # ✅ Load and check for expected key before returning
+        with open(pose_file, 'r') as f:
+            pose_data = json.load(f)
+
+        if 'pose_sequence' not in pose_data:
+            raise RuntimeError(f"Pose data missing 'pose_sequence' key in file: {pose_file}")
+
         return pose_file
-        
+
     except Exception as e:
         raise RuntimeError(f"Video processing failed: {e}") from e
+
 
 
 def _load_and_validate_pose_data(pose_file: str) -> dict:
@@ -188,13 +195,13 @@ def _load_and_validate_pose_data(pose_file: str) -> dict:
             raise ValueError("Pose data must be a dictionary")
             
         # Add more specific validation as needed based on your data structure
-        required_keys = ['poses', 'metadata']  # Adjust based on your actual structure
+        required_keys = ['pose_sequence', 'metadata']  # Adjust based on your actual structure
         missing_keys = [key for key in required_keys if key not in pose_data]
         if missing_keys:
             print(f"Warning: Missing keys in pose data: {missing_keys}")
             print("Loaded pose data:", pose_data)
-        if 'poses' not in pose_data:
-            raise RuntimeError("Pose data missing 'poses' key")
+        if 'pose_sequence' not in pose_data:
+            raise RuntimeError("Pose data missing 'pose_sequence' key")
 
         
         return pose_data

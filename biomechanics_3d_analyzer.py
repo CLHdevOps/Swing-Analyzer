@@ -46,6 +46,7 @@ class Biomechanics3DAnalyzer:
         }
 
     def analyze_swing_3d(self, pose_data: Dict) -> Dict:
+ 
         """
         Comprehensive 3D swing analysis.
         
@@ -130,7 +131,8 @@ class Biomechanics3DAnalyzer:
                 
                 # Swing phase (bat acceleration)
                 phases['swing']['start'] = phases['stride']['end']
-                contact_frame = peaks[0] if peaks else total_frames * 2 // 3
+                contact_frame = peaks[0] if peaks is not None and len(peaks) > 0 else total_frames * 2 // 3
+
                 phases['swing']['end'] = contact_frame
                 
                 # Contact phase (ball contact)
