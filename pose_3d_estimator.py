@@ -391,10 +391,10 @@ class Pose3DEstimator:
         # 3D trajectory plot
         colors = plt.cm.tab10(np.linspace(0, 1, len(key_joints)))
         for i, joint in enumerate(key_joints):
-            if trajectories[joint]['x']:  # Check if data exists
-                ax1.plot(trajectories[joint]['x'], 
-                        trajectories[joint]['y'], 
-                        trajectories[joint]['z'], 
+            if len(trajectories[joint]['x']) > 0:  # Check if data exists
+                ax1.plot(trajectories[joint]['x'],
+                        trajectories[joint]['y'],
+                        trajectories[joint]['z'],
                         label=joint, color=colors[i], alpha=0.7)
         
         ax1.set_xlabel('X (meters)')
@@ -404,7 +404,7 @@ class Pose3DEstimator:
         ax1.legend()
         
         # Wrist path analysis
-        if trajectories['left_wrist']['x'] and trajectories['right_wrist']['x']:
+        if len(trajectories['left_wrist']['x']) > 0 and len(trajectories['right_wrist']['x']) > 0:
             ax2.plot(trajectories['left_wrist']['x'], 
                     trajectories['left_wrist']['y'], 
                     trajectories['left_wrist']['z'], 
@@ -418,7 +418,7 @@ class Pose3DEstimator:
         
         # X-Y plane view
         for i, joint in enumerate(['left_wrist', 'right_wrist']):
-            if trajectories[joint]['x']:
+            if len(trajectories[joint]['x']) > 0:
                 ax3.plot(trajectories[joint]['x'], trajectories[joint]['y'], 
                         label=joint, color=colors[i+6])
         ax3.set_xlabel('X (meters)')
@@ -429,7 +429,7 @@ class Pose3DEstimator:
         
         # Z trajectory over time
         for i, joint in enumerate(['left_wrist', 'right_wrist']):
-            if trajectories[joint]['z']:
+            if len(trajectories[joint]['z']) > 0:
                 ax4.plot(trajectories[joint]['z'], label=joint, color=colors[i+6])
         ax4.set_xlabel('Frame')
         ax4.set_ylabel('Z (meters)')
@@ -467,7 +467,7 @@ class Pose3DEstimator:
                         z_coords.append(landmark['z'])
                         break
             
-            if x_coords:  # Only plot if data exists
+            if len(x_coords) > 0:  # Only plot if data exists
                 fig.add_trace(go.Scatter3d(
                     x=x_coords,
                     y=y_coords,

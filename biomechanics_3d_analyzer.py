@@ -64,7 +64,7 @@ class Biomechanics3DAnalyzer:
             'recommendations': [],
             'performance_scores': {},
             'visualization_data': {}
-        }
+        }  
         
         # Detect biomechanical issues
         issues = self._detect_3d_issues(pose_data, analysis_results)
@@ -88,10 +88,10 @@ class Biomechanics3DAnalyzer:
         
         # Extract wrist positions over time
         wrist_positions = self._extract_joint_trajectory(sequence, 'right_wrist')
-        if not wrist_positions:
+        if len(wrist_positions) == 0:
             wrist_positions = self._extract_joint_trajectory(sequence, 'left_wrist')
         
-        if not wrist_positions:
+        if len(wrist_positions) == 0:
             return {}
         
         # Calculate wrist velocity and acceleration
@@ -250,11 +250,11 @@ class Biomechanics3DAnalyzer:
             
             # Analyze wrist velocity to determine acceleration/deceleration phases
             wrist_positions = self._extract_joint_trajectory(sequence, 'right_wrist')
-            if wrist_positions:
+            if len(wrist_positions) > 0:
                 velocities = self._calculate_velocity(wrist_positions)
                 vel_magnitudes = [np.linalg.norm(v) for v in velocities]
                 
-                if vel_magnitudes:
+                if len(vel_magnitudes) > 0:
                     peak_idx = np.argmax(vel_magnitudes)
                     temporal_analysis['acceleration_phase_duration'] = peak_idx / fps
                     temporal_analysis['deceleration_phase_duration'] = (len(vel_magnitudes) - peak_idx) / fps
@@ -266,8 +266,9 @@ class Biomechanics3DAnalyzer:
         issues = []
         
         # Check hip-shoulder separation
-        if analysis['spatial_analysis']['hip_shoulder_separation']:
-            avg_separation = np.mean(analysis['spatial_analysis']['hip_shoulder_separation'])
+        hip_sep_data = analysis['spatial_analysis']['hip_shoulder_separation']
+        if len(hip_sep_data) > 0:
+            avg_separation = np.mean(hip_sep_data)
             ideal_range = self.ideal_metrics['hip_shoulder_separation_3d']
             
             if avg_separation < ideal_range[0]:
@@ -283,8 +284,9 @@ class Biomechanics3DAnalyzer:
             issues.append("Poor kinematic sequence timing")
         
         # Check spine tilt
-        if analysis['spatial_analysis']['spine_tilt']:
-            avg_tilt = np.mean(analysis['spatial_analysis']['spine_tilt'])
+        spine_tilt_data = analysis['spatial_analysis']['spine_tilt']
+        if len(spine_tilt_data) > 0:
+            avg_tilt = np.mean(spine_tilt_data)
             ideal_range = self.ideal_metrics['spine_tilt_deg']
             
             if avg_tilt < ideal_range[0]:
@@ -293,8 +295,9 @@ class Biomechanics3DAnalyzer:
                 issues.append("Excessive spine tilt")
         
         # Check stance width
-        if analysis['spatial_analysis']['stance_width']:
-            avg_width = np.mean(analysis['spatial_analysis']['stance_width'])
+        stance_width_data = analysis['spatial_analysis']['stance_width']
+        if len(stance_width_data) > 0:
+            avg_width = np.mean(stance_width_data)
             if avg_width < 0.3:  # meters
                 issues.append("Narrow stance detected")
             elif avg_width > 0.8:

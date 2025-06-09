@@ -22,18 +22,26 @@ except ImportError as e:
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
-# Custom JSON encoder to handle numpy types
+# Custom JSON encoder to handle numpy types and arrays
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
-        if isinstance(obj, (np.integer, np.floating)):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif hasattr(obj, 'item'):
             return obj.item()
         return super().default(obj)
 
 app.json_encoder = CustomJSONEncoder
 
 # Initialize 3D pose estimation and biomechanics analysis
-pose_estimator = Pose3DEstimator()
-biomechanics_analyzer = Biomechanics3DAnalyzer()
+pose_estimator = Pose3DEstimator() if Pose3DEstimator else None
+biomechanics_analyzer = Biomechanics3DAnalyzer() if Biomechanics3DAnalyzer else None
 
 # Load biomechanical swing standards from a JSON file
 try:
@@ -50,8 +58,31 @@ except FileNotFoundError:
         "bat_speed_mph": [75, 95]
     }
 
+def sanitize_for_json(data):
+    """Recursively convert numpy types to native Python types for JSON serialization."""
+    if isinstance(data, dict):
+        return {key: sanitize_for_json(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [sanitize_for_json(item) for item in data]
+    elif isinstance(data, np.integer):
+        return int(data)
+    elif isinstance(data, np.floating):
+        return float(data)
+    elif isinstance(data, np.ndarray):
+        return data.tolist()
+    elif isinstance(data, np.bool_):
+        return bool(data)
+    elif hasattr(data, 'item'):
+        return data.item()
+    else:
+        return data
+
 def run_3d_pose_analysis(video_path, output_dir):
     """Run 3D pose analysis on the uploaded video using MediaPipe."""
+    if pose_estimator is None or biomechanics_analyzer is None:
+        print("Analysis modules not available. Using mock analysis.")
+        return create_mock_3d_analysis(output_dir)
+    
     try:
         # Process video with 3D pose estimation
         pose_file = pose_estimator.process_video(video_path, output_dir)
@@ -158,6 +189,9 @@ def analyze():
             # Run 3D pose analysis
             analysis_results = run_3d_pose_analysis(video_path, output_dir)
             
+            # Sanitize all analysis results for JSON serialization
+            analysis_results = sanitize_for_json(analysis_results)
+            
             # Build visualization URLs if visualizations exist
             visualizations = {}
             if 'visualizations' in analysis_results and analysis_results['visualizations']:
@@ -167,8 +201,8 @@ def analyze():
                 if 'interactive_plot' in vis and vis['interactive_plot']:
                     visualizations['interactive_plot'] = f"/visualization/{os.path.basename(vis['interactive_plot'])}"
             
-            # Build response
-            return jsonify({
+            # Build response with sanitized data
+            response_data = {
                 "score": analysis_results.get('score', 0),
                 "feedback": analysis_results.get('recommendations', []),
                 "status": "success",
@@ -180,7 +214,12 @@ def analyze():
                 "temporal_analysis": analysis_results.get('temporal_analysis', {}),
                 "visualizations": visualizations,
                 "analysis_notes": "3D analysis response"
-            })
+            }
+            
+            # Final sanitization to ensure no numpy types remain
+            response_data = sanitize_for_json(response_data)
+            
+            return jsonify(response_data)
             
         finally:
             # Store temp_dir path for visualization serving
