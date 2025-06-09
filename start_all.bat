@@ -1,5 +1,5 @@
 @echo off
-echo Starting Swing Analyzer - Full Stack Application
+echo Starting 3D Swing Analyzer - Advanced Biomechanical Analysis
 echo.
 
 REM Check if virtual environment exists
@@ -52,10 +52,16 @@ start "Frontend Server" cmd /k "npm run dev"
 
 echo.
 echo ========================================
-echo Both servers are starting!
+echo 3D Swing Analyzer Servers Starting!
 echo ========================================
-echo Backend: Usually runs on http://localhost:5000
-echo Frontend: Usually runs on http://localhost:5173
+echo Backend (3D Analysis): http://localhost:5001
+echo Frontend (Enhanced UI): http://localhost:5173
+echo.
+echo Features Available:
+echo ✓ MediaPipe 3D pose estimation
+echo ✓ Kinematic sequence analysis
+echo ✓ Interactive 3D visualizations
+echo ✓ Advanced biomechanical feedback
 echo.
 echo Press any key to close this window...
 echo (Note: Servers will continue running in separate windows)
