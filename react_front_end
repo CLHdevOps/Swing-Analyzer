@@ -1,0 +1,75 @@
+// Basic React Frontend to Upload a Swing Video and Display Feedback
+import { useState } from 'react';
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+export default function SwingAnalyzer() {
+  const [videoFile, setVideoFile] = useState(null);
+  const [feedback, setFeedback] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleUpload = async () => {
+    if (!videoFile) return;
+
+    const formData = new FormData();
+    formData.append('video', videoFile);
+
+    setLoading(true);
+    setFeedback([]);
+    setErrorMessage("");
+
+    try {
+      const res = await fetch('http://localhost:5001/analyze', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error ${res.status}: ${text}`);
+      }
+
+      const data = await res.json();
+      setFeedback(data.feedback);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setErrorMessage("An error occurred while processing your video. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">Swing Analysis Upload</h1>
+      <input
+        type="file"
+        accept="video/*"
+        onChange={(e) => setVideoFile(e.target.files[0])}
+        className="mb-4"
+      />
+      <Button onClick={handleUpload} disabled={loading || !videoFile}>
+        {loading ? 'Analyzing...' : 'Upload & Analyze'}
+      </Button>
+
+      {errorMessage && (
+        <p className="text-red-500 mt-4">{errorMessage}</p>
+      )}
+
+      {feedback.length > 0 && (
+        <div className="mt-6 space-y-4">
+          {feedback.map((item, idx) => (
+            <Card key={idx}>
+              <CardContent className="p-4">
+                <h2 className="font-semibold text-lg">Issue: {item.issue}</h2>
+                <p><strong>Drills:</strong> {item.drills.join(', ')}</p>
+                <p><strong>Exercises:</strong> {item.exercises.join(', ')}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
