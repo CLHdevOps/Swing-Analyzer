@@ -10,8 +10,14 @@ import tempfile
 import shutil
 import traceback
 import numpy as np
-from pose_3d_estimator import Pose3DEstimator
-from biomechanics_3d_analyzer import Biomechanics3DAnalyzer
+try:
+    from pose_3d_estimator import Pose3DEstimator
+    from biomechanics_3d_analyzer import Biomechanics3DAnalyzer
+except ImportError as e:
+    print(f"Warning: Could not import analysis modules: {e}")
+    print("Some features may not work properly.")
+    Pose3DEstimator = None
+    Biomechanics3DAnalyzer = None
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes

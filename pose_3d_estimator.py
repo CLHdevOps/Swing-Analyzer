@@ -53,68 +53,222 @@ class Pose3DEstimator:
             'left_ankle': 27, 'right_ankle': 28
         }
 
-    def process_video(self, video_path: str, output_dir: str) -> str:
+    def process_video(self,
+                     video_path: str,
+                     output_dir: str,
+                     frame_skip: int = 1,
+                     max_frames: Optional[int] = None,
+                     apply_smoothing: bool = True,
+                     progress_callback: Optional[callable] = None) -> str:
         """
-        Process video to extract 3D pose sequences.
+        Process video to extract 3D pose sequences with enhanced error handling and performance.
         
         Args:
-            video_path: Path to input video
+            video_path: Path to input video file
             output_dir: Directory to save 3D pose data
+            frame_skip: Process every nth frame (1 = every frame, 2 = every other frame)
+            max_frames: Maximum number of frames to process (None = all frames)
+            apply_smoothing: Whether to apply temporal smoothing to pose data
+            progress_callback: Optional callback function for progress updates
             
         Returns:
-            Path to saved 3D pose data
+            Path to saved 3D pose data file
+            
+        Raises:
+            ValueError: If video file cannot be opened or is invalid
+            FileNotFoundError: If video file doesn't exist
+            PermissionError: If output directory cannot be created/written to
+            RuntimeError: If pose processing fails critically
         """
+        # Validate inputs
+        self._validate_video_inputs(video_path, output_dir)
+        
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Initialize video capture with proper resource management
+        cap = None
+        try:
+            cap = self._initialize_video_capture(video_path)
+            video_info = self._get_video_info(cap)
+            
+            # Process video frames
+            pose_sequence = self._process_video_frames(
+                cap,
+                video_info,
+                frame_skip,
+                max_frames,
+                progress_callback
+            )
+            
+            # Validate we have sufficient pose data
+            if not pose_sequence:
+                raise RuntimeError("No valid pose data extracted from video")
+            
+            # Apply temporal smoothing if requested
+            if apply_smoothing and len(pose_sequence) > 1:
+                pose_sequence = self._apply_temporal_smoothing(pose_sequence)
+            
+            # Save results
+            output_file = self._save_pose_data(
+                pose_sequence,
+                output_dir,
+                video_info
+            )
+            
+            return output_file
+            
+        except Exception as e:
+            # Log error and re-raise with context
+            error_msg = f"Failed to process video '{video_path}': {str(e)}"
+            raise RuntimeError(error_msg) from e
+        finally:
+            # Ensure video capture is properly released
+            if cap is not None:
+                cap.release()
+
+    def _validate_video_inputs(self, video_path: str, output_dir: str) -> None:
+        """Validate input parameters for video processing."""
+        if not video_path or not isinstance(video_path, str):
+            raise ValueError("video_path must be a non-empty string")
+        
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video file not found: {video_path}")
+        
+        if not output_dir or not isinstance(output_dir, str):
+            raise ValueError("output_dir must be a non-empty string")
+        
+        # Check if we can create/write to output directory
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            test_file = os.path.join(output_dir, '.test_write')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+        except (PermissionError, OSError) as e:
+            raise PermissionError(f"Cannot write to output directory '{output_dir}': {e}")
+
+    def _initialize_video_capture(self, video_path: str) -> cv2.VideoCapture:
+        """Initialize video capture with validation."""
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            raise ValueError(f"Cannot open video: {video_path}")
+            raise ValueError(f"Cannot open video file: {video_path}")
         
-        frame_count = 0
+        # Verify video has frames
+        ret, _ = cap.read()
+        if not ret:
+            cap.release()
+            raise ValueError(f"Video file appears to be empty or corrupted: {video_path}")
+        
+        # Reset to beginning
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        return cap
+
+    def _get_video_info(self, cap: cv2.VideoCapture) -> Dict:
+        """Extract video metadata."""
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0  # Default to 30 if not available
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        return {
+            'total_frames': total_frames,
+            'fps': fps,
+            'width': width,
+            'height': height,
+            'duration_seconds': total_frames / fps if fps > 0 else 0
+        }
+
+    def _process_video_frames(self,
+                            cap: cv2.VideoCapture,
+                            video_info: Dict,
+                            frame_skip: int,
+                            max_frames: Optional[int],
+                            progress_callback: Optional[callable]) -> List[Dict]:
+        """Process video frames and extract pose data."""
         pose_sequence = []
+        frame_count = 0
+        processed_count = 0
         
-        while cap.isOpened():
+        # Calculate progress reporting interval
+        total_frames = min(max_frames or video_info['total_frames'], video_info['total_frames'])
+        progress_interval = max(1, total_frames // 100)  # Report every 1%
+        
+        while cap.isOpened() and (max_frames is None or processed_count < max_frames):
             ret, frame = cap.read()
             if not ret:
                 break
+            
+            # Skip frames if requested
+            if frame_count % frame_skip != 0:
+                frame_count += 1
+                continue
+            
+            try:
+                # Convert BGR to RGB
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 
-            # Convert BGR to RGB
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # Process pose estimation
-            results = self.pose.process(rgb_frame)
-            
-            if results.pose_world_landmarks:
-                # Extract 3D world coordinates
-                frame_data = self._extract_3d_landmarks(
-                    results.pose_world_landmarks, 
-                    frame_count
-                )
-                pose_sequence.append(frame_data)
+                # Process pose estimation
+                results = self.pose.process(rgb_frame)
+                
+                if results.pose_world_landmarks:
+                    # Calculate actual timestamp based on video FPS
+                    timestamp = frame_count / video_info['fps']
+                    
+                    frame_data = self._extract_3d_landmarks(
+                        results.pose_world_landmarks,
+                        frame_count,
+                        timestamp
+                    )
+                    pose_sequence.append(frame_data)
+                
+            except Exception as e:
+                # Log frame processing error but continue
+                print(f"Warning: Failed to process frame {frame_count}: {e}")
+                continue
             
             frame_count += 1
+            processed_count += 1
+            
+            # Report progress
+            if progress_callback and processed_count % progress_interval == 0:
+                progress = (processed_count / total_frames) * 100
+                progress_callback(progress, processed_count, total_frames)
         
-        cap.release()
-        
-        # Apply temporal smoothing
-        if pose_sequence:
-            pose_sequence = self._apply_temporal_smoothing(pose_sequence)
-        
-        # Save 3D pose data
+        return pose_sequence
+
+    def _save_pose_data(self,
+                       pose_sequence: List[Dict],
+                       output_dir: str,
+                       video_info: Dict) -> str:
+        """Save pose data with enhanced metadata."""
         output_file = os.path.join(output_dir, "pose_3d_sequence.json")
-        with open(output_file, 'w') as f:
-            json.dump({
-                'total_frames': frame_count,
-                'pose_sequence': pose_sequence,
+        
+        # Prepare output data with enhanced metadata
+        output_data = {
+            'metadata': {
+                'total_frames_processed': len(pose_sequence),
+                'video_info': video_info,
+                'coordinate_system': 'world_coordinates_meters',
                 'landmark_names': self.landmark_names,
-                'coordinate_system': 'world_coordinates_meters'
-            }, f, indent=2)
+                'processing_timestamp': __import__('datetime').datetime.now().isoformat()
+            },
+            'pose_sequence': pose_sequence
+        }
+        
+        try:
+            with open(output_file, 'w') as f:
+                json.dump(output_data, f, indent=2)
+        except (IOError, OSError) as e:
+            raise RuntimeError(f"Failed to save pose data to '{output_file}': {e}")
         
         return output_file
 
-    def _extract_3d_landmarks(self, landmarks, frame_idx: int) -> Dict:
+    def _extract_3d_landmarks(self, landmarks, frame_idx: int, timestamp: Optional[float] = None) -> Dict:
         """Extract 3D landmarks from MediaPipe results."""
         frame_data = {
             'frame': frame_idx,
-            'timestamp': frame_idx / 30.0,  # Assuming 30 FPS
+            'timestamp': timestamp if timestamp is not None else frame_idx / 30.0,
             'landmarks_3d': []
         }
         
