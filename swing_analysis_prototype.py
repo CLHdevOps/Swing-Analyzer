@@ -9,11 +9,21 @@ import json
 import tempfile
 import shutil
 import traceback
+import numpy as np
 from pose_3d_estimator import Pose3DEstimator
 from biomechanics_3d_analyzer import Biomechanics3DAnalyzer
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+
+# Custom JSON encoder to handle numpy types
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (np.integer, np.floating)):
+            return obj.item()
+        return super().default(obj)
+
+app.json_encoder = CustomJSONEncoder
 
 # Initialize 3D pose estimation and biomechanics analysis
 pose_estimator = Pose3DEstimator()
@@ -139,27 +149,22 @@ def analyze():
             # Save uploaded video
             video.save(video_path)
             
-            # Placeholder for 3D pose analysis function
-            # analysis_results = run_3d_pose_analysis(video_path, output_dir)
-            # Assume analysis_results is a dictionary with necessary keys for the sake of this example
+            # Run 3D pose analysis
+            analysis_results = run_3d_pose_analysis(video_path, output_dir)
             
-            # Simulate analysis results for demonstration
-            analysis_results = {
-                "recommendations": [],
-                "issues_detected": [],
-                "visualizations": {},
-                "score": 0,
-                "performance_scores": {},
-                "swing_phases": {},
-                "kinematic_sequence": {},
-                "spatial_analysis": {},
-                "temporal_analysis": {}
-            }
+            # Build visualization URLs if visualizations exist
+            visualizations = {}
+            if 'visualizations' in analysis_results and analysis_results['visualizations']:
+                vis = analysis_results['visualizations']
+                if 'matplotlib_plot' in vis and vis['matplotlib_plot']:
+                    visualizations['matplotlib_plot'] = f"/visualization/{os.path.basename(vis['matplotlib_plot'])}"
+                if 'interactive_plot' in vis and vis['interactive_plot']:
+                    visualizations['interactive_plot'] = f"/visualization/{os.path.basename(vis['interactive_plot'])}"
             
             # Build response
             return jsonify({
                 "score": analysis_results.get('score', 0),
-                "feedback": [],
+                "feedback": analysis_results.get('recommendations', []),
                 "status": "success",
                 "analysis_type": "3D Pose Analysis",
                 "performance_scores": analysis_results.get('performance_scores', {}),
@@ -167,8 +172,8 @@ def analyze():
                 "kinematic_sequence": analysis_results.get('kinematic_sequence', {}),
                 "spatial_analysis": analysis_results.get('spatial_analysis', {}),
                 "temporal_analysis": analysis_results.get('temporal_analysis', {}),
-                "visualizations": {},
-                "analysis_notes": "3D analysis placeholder response"
+                "visualizations": visualizations,
+                "analysis_notes": "3D analysis response"
             })
             
         finally:
